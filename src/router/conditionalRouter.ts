@@ -83,13 +83,13 @@ function evaluateCondition(
   for (const [key, value] of Object.entries(query)) {
     // 逻辑操作符：$and / $or — value 是子查询数组
     if (key === '$and') {
-      const subQueries = value as Record<string, unknown>[]
-      if (!subQueries.every(q => evaluateCondition(q, ctx))) return false
+      if (!Array.isArray(value)) return false
+      if (!value.every(q => evaluateCondition(q as Record<string, unknown>, ctx))) return false
       continue
     }
     if (key === '$or') {
-      const subQueries = value as Record<string, unknown>[]
-      if (!subQueries.some(q => evaluateCondition(q, ctx))) return false
+      if (!Array.isArray(value)) return false
+      if (!value.some(q => evaluateCondition(q as Record<string, unknown>, ctx))) return false
       continue
     }
 
