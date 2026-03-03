@@ -79,6 +79,15 @@ describe('Loadbalancer', () => {
   it('throws when targets array is empty', () => {
     expect(() => selectTarget([])).toThrow()
   })
+
+  it('throws when all targets have weight 0 (totalWeight === 0)', () => {
+    const targets: Target[] = [
+      { provider: 'a', weight: 0 },
+      { provider: 'b', weight: 0 },
+    ]
+    expect(() => selectTarget(targets)).toThrow('total weight must be greater than 0')
+    expect(() => selectTarget(targets, 'user-1')).toThrow('total weight must be greater than 0')
+  })
 })
 
 // ─────────────────────────────────────────────
@@ -147,6 +156,45 @@ describe('Conditional Router', () => {
     const ctx2 = makeCtx({ model: 'gpt-4', metadata: { tier: 'free' } })
     expect(matchTarget(rules, undefined, targets, ctx2)).toBeNull()
   })
+
+  it('supports $or logical operator', () => {
+    const rules = [
+      {
+        query: {
+          $or: [
+            { model: { $eq: 'gpt-4' } },
+            { model: { $eq: 'gpt-4o' } },
+          ],
+        },
+        then: 'premium',
+      },
+    ]
+    // 任一条件满足 → 命中
+    expect(matchTarget(rules, undefined, targets, makeCtx({ model: 'gpt-4o' }))?.provider)
+      .toBe('premium-provider')
+    // 全不满足 → 不命中
+    expect(matchTarget(rules, undefined, targets, makeCtx({ model: 'claude-3' })))
+      .toBeNull()
+  })
+
+  it('matches $regex operator', () => {
+    const rules = [
+      { query: { model: { $regex: '^gpt-4' } }, then: 'premium' },
+    ]
+    expect(matchTarget(rules, undefined, targets, makeCtx({ model: 'gpt-4o' }))?.provider)
+      .toBe('premium-provider')
+    expect(matchTarget(rules, undefined, targets, makeCtx({ model: 'claude-3' })))
+      .toBeNull()
+  })
+
+  it('handles invalid $regex without crashing', () => {
+    const rules = [
+      { query: { model: { $regex: '(invalid[' } }, then: 'premium' },
+    ]
+    // 无效正则不崩溃，视为不匹配
+    expect(matchTarget(rules, undefined, targets, makeCtx({ model: 'anything' })))
+      .toBeNull()
+  })
 })
 
 // ─────────────────────────────────────────────
@@ -193,6 +241,53 @@ describe('Fallback mode', () => {
       cb.recordFailure()
     }
     await expect(routeRequest(config, ctx)).rejects.toThrow('OPEN')
+  })
+})
+
+// ─────────────────────────────────────────────
+// 嵌套路由递归
+// ─────────────────────────────────────────────
+
+describe('Nested routing', () => {
+  beforeEach(() => resetAllCircuitBreakers())
+
+  it('recursively resolves nested strategy to leaf target', async () => {
+    // 顶层 loadbalance → 子层 single，应递归到叶子节点
+    const config: GatewayConfig = {
+      strategy: { mode: 'single' },
+      targets: [
+        {
+          provider: 'wrapper',
+          // 嵌套策略
+          strategy: { mode: 'single' },
+          targets: [
+            { provider: 'leaf-provider', model: 'gpt-4' },
+          ],
+        },
+      ],
+    }
+    const { target } = await routeRequest(config, makeCtx())
+    // 应该递归到叶子节点，而不是返回 wrapper
+    expect(target.provider).toBe('leaf-provider')
+    expect(target.model).toBe('gpt-4')
+  })
+
+  it('uses nested target retry settings over global', async () => {
+    const config: GatewayConfig = {
+      strategy: { mode: 'single' },
+      targets: [
+        {
+          provider: 'wrapper',
+          retry: { attempts: 5 },
+          strategy: { mode: 'single' },
+          targets: [{ provider: 'leaf', model: 'gpt-4' }],
+        },
+      ],
+      retry: { attempts: 1 },
+    }
+    const { retrySettings } = await routeRequest(config, makeCtx())
+    // 嵌套层的 retry(5) 优先于全局 retry(1)
+    expect(retrySettings.attempts).toBe(5)
   })
 })
 
