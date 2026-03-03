@@ -1,0 +1,423 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>AI Gateway Lite — 路由决策可视化</title>
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&family=Noto+Sans+SC:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+  :root{
+    --bg:#0c0e14;--surface:#13151e;--surface2:#191c27;--border:#1f2233;
+    --text:#dfe1e8;--text2:#8b8fa3;--text3:#4e5266;
+    --blue:#3576f0;--blue-glow:#3576f030;--green:#1dcc6a;--green-glow:#1dcc6a30;
+    --amber:#e5a31a;--amber-glow:#e5a31a30;--red:#e5413c;--red-glow:#e5413c30;
+    --mono:'JetBrains Mono',monospace;--sans:'Noto Sans SC',system-ui,sans-serif;
+  }
+  body{background:var(--bg);color:var(--text);font-family:var(--sans);min-height:100vh;padding:28px 20px}
+  
+  .header{text-align:center;margin-bottom:36px}
+  .badge{display:inline-flex;align-items:center;gap:8px;padding:5px 14px;border-radius:16px;border:1px solid var(--border);font:500 10px/1 var(--mono);color:var(--text2);text-transform:uppercase;letter-spacing:.08em;margin-bottom:14px}
+  .badge .dot{width:6px;height:6px;border-radius:50%;background:var(--green);box-shadow:0 0 8px var(--green-glow)}
+  .title{font:700 26px/1.2 var(--sans);background:linear-gradient(135deg,var(--text),var(--text2));-webkit-background-clip:text;-webkit-text-fill-color:transparent;letter-spacing:-.03em}
+  .subtitle{color:var(--text3);font-size:13px;margin-top:6px}
+
+  .container{max-width:1080px;margin:0 auto}
+
+  .controls{display:flex;gap:12px;flex-wrap:wrap;padding:14px 18px;border-radius:12px;border:1px solid var(--border);background:var(--surface);margin-bottom:20px;align-items:flex-end}
+  .ctrl-group{flex:1;min-width:130px}
+  .ctrl-label{display:block;font:500 9px/1 var(--mono);color:var(--text3);text-transform:uppercase;letter-spacing:.06em;margin-bottom:6px}
+  .mode-btns{display:flex;gap:3px}
+  .mode-btn{padding:5px 11px;border-radius:5px;border:none;cursor:pointer;font:500 11px/1 var(--mono);background:var(--surface2);color:var(--text3);transition:all .2s}
+  .mode-btn.active{background:var(--blue);color:#fff}
+  .text-input,.select-input{width:100%;padding:5px 9px;border-radius:5px;border:1px solid var(--border);background:var(--bg);color:var(--text);font:12px var(--mono);outline:none}
+  .text-input:focus,.select-input:focus{border-color:var(--blue)}
+  .btn-send{padding:7px 22px;border-radius:7px;border:none;cursor:pointer;font:600 12px/1 var(--sans);background:var(--blue);color:#fff;transition:all .2s}
+  .btn-send:disabled{background:var(--surface2);color:var(--text3);cursor:default}
+  .btn-sm{padding:6px 10px;border-radius:6px;border:1px solid;cursor:pointer;font:11px var(--mono);background:transparent;transition:all .2s}
+  .btn-fail{border-color:var(--red-glow);color:var(--red)}
+  .btn-reset{border-color:var(--green-glow);color:var(--green)}
+
+  .main{display:flex;gap:16px}
+  .flow-area{flex:1;position:relative;padding:28px;border-radius:14px;border:1px solid var(--border);background:var(--surface);min-height:380px}
+
+  .gw-node{display:inline-block;padding:14px 28px;border-radius:10px;border:2px solid var(--border);background:var(--surface2);text-align:center;transition:all .4s}
+  .gw-node.validating{border-color:var(--amber);box-shadow:0 0 20px var(--amber-glow)}
+  .gw-node.routing{border-color:var(--blue);box-shadow:0 0 20px var(--blue-glow)}
+  .gw-node.error{border-color:var(--red);box-shadow:0 0 20px var(--red-glow)}
+  .gw-label{font:500 9px/1 var(--mono);color:var(--text3);text-transform:uppercase;letter-spacing:.08em;margin-bottom:3px}
+  .gw-status{font:600 14px/1 var(--mono);color:var(--text)}
+  .gw-node.error .gw-status{color:var(--red)}
+
+  .strategy-label{text-align:center;margin:20px 0;font:11px var(--mono);color:var(--text3)}
+
+  .model-grid{display:flex;justify-content:center;gap:16px;flex-wrap:wrap}
+  .model-card{position:relative;padding:14px 18px;border-radius:10px;border:2px solid var(--border);background:var(--surface2);min-width:190px;transition:all .4s}
+  .model-card.routing{border-color:var(--blue);box-shadow:0 0 16px var(--blue-glow)}
+  .model-card.selected{border-color:var(--green);box-shadow:0 0 16px var(--green-glow)}
+  .model-card.rejected{border-color:var(--red);box-shadow:0 0 16px var(--red-glow)}
+  .model-head{display:flex;align-items:center;gap:8px;margin-bottom:6px}
+  .model-dot{width:9px;height:9px;border-radius:50%}
+  .model-name{font:600 13px/1 var(--mono);color:var(--text);letter-spacing:-.02em}
+  .model-meta{display:flex;justify-content:space-between;font:11px var(--mono);color:var(--text3)}
+  .cb-badge{margin-top:7px;padding:3px 7px;border-radius:5px;font:10px var(--mono);text-align:center}
+  .cb-closed{background:#1dcc6a18;color:var(--green)}
+  .cb-open{background:#e5413c18;color:var(--red)}
+  .cb-half{background:#e5a31a18;color:var(--amber)}
+  .status-icon{position:absolute;top:-7px;right:-7px;width:18px;height:18px;border-radius:50%;display:flex;align-items:center;justify-content:center;font:700 10px/1 var(--sans)}
+  .status-icon.ok{background:var(--green);color:#000}
+  .status-icon.fail{background:var(--red);color:#fff}
+
+  .error-box{margin-top:24px;padding:10px 18px;border-radius:7px;background:#e5413c12;border:1px solid #e5413c28;font:12px var(--mono);color:#f87171;text-align:center}
+  .error-box .hint{font-size:10px;color:var(--text3);margin-top:3px}
+
+  .log-panel{width:320px;border-radius:12px;border:1px solid var(--border);background:var(--surface);display:flex;flex-direction:column;overflow:hidden}
+  .log-header{padding:10px 14px;border-bottom:1px solid var(--border);display:flex;justify-content:space-between;align-items:center;font:500 10px/1 var(--mono);color:var(--text3);text-transform:uppercase;letter-spacing:.05em}
+  .log-clear{background:none;border:none;color:var(--text3);cursor:pointer;font:10px var(--mono)}
+  .log-body{flex:1;padding:6px 10px;overflow-y:auto;font:11px/1.65 var(--mono);max-height:400px}
+  .log-body::-webkit-scrollbar{width:4px}
+  .log-body::-webkit-scrollbar-thumb{background:var(--border);border-radius:2px}
+  .log-empty{color:var(--text3);text-align:center;margin-top:36px}
+  .log-time{color:var(--text3)}
+  .log-request{color:#38bdf8}.log-config{color:#a78bfa}.log-route{color:var(--amber)}.log-success{color:var(--green)}.log-error{color:var(--red)}.log-info{color:#94a3b8}
+
+  .config-bar{margin-top:16px;padding:14px 18px;border-radius:10px;border:1px solid var(--border);background:var(--surface)}
+  .config-title{font:500 9px/1 var(--mono);color:var(--text3);text-transform:uppercase;letter-spacing:.06em;margin-bottom:7px}
+  .config-pre{margin:0;font:11px/1.55 var(--mono);color:#94a3b8;overflow-x:auto;white-space:pre}
+
+  .particle{position:absolute;width:7px;height:7px;border-radius:50%;pointer-events:none;z-index:50;transition:none}
+
+  @media(max-width:780px){.main{flex-direction:column}.log-panel{width:100%}}
+</style>
+</head>
+<body>
+
+<div class="header">
+  <div class="badge"><span class="dot"></span>AI Gateway Lite — 路由可视化</div>
+  <div class="title">请求路由决策演示</div>
+  <div class="subtitle">模拟请求进入网关 → 策略路由 → 选中模型 → 转发（未实现）的完整流程</div>
+</div>
+
+<div class="container">
+  <!-- Controls -->
+  <div class="controls" id="controls">
+    <div class="ctrl-group">
+      <span class="ctrl-label">策略模式</span>
+      <div class="mode-btns">
+        <button class="mode-btn active" data-mode="loadbalance">loadbalance</button>
+        <button class="mode-btn" data-mode="fallback">fallback</button>
+        <button class="mode-btn" data-mode="conditional">conditional</button>
+      </div>
+    </div>
+    <div class="ctrl-group">
+      <span class="ctrl-label">User ID（粘性哈希）</span>
+      <input class="text-input" id="userId" value="user_xxx" placeholder="留空 = 纯随机">
+    </div>
+    <div class="ctrl-group" id="condGroup" style="display:none">
+      <span class="ctrl-label">匹配值（model 字段）</span>
+      <select class="select-input" id="condValue">
+        <option value="gpt-4o">gpt-4o</option>
+        <option value="claude-sonnet">claude-sonnet</option>
+        <option value="deepseek-v3">deepseek-v3</option>
+        <option value="nonexistent">不存在的模型</option>
+      </select>
+    </div>
+    <div style="display:flex;align-items:flex-end;gap:6px;flex-wrap:wrap">
+      <button class="btn-send" id="btnSend">发送请求</button>
+      <button class="btn-sm btn-fail" id="btnFail0" style="display:none">模拟 gpt-4o 失败</button>
+      <button class="btn-sm btn-fail" id="btnFail1" style="display:none">模拟 claude 失败</button>
+      <button class="btn-sm btn-reset" id="btnReset" style="display:none">重置熔断器</button>
+    </div>
+  </div>
+
+  <!-- Main -->
+  <div class="main">
+    <div class="flow-area" id="flowArea">
+      <!-- Gateway node -->
+      <div style="display:flex;justify-content:center;margin-bottom:50px">
+        <div class="gw-node" id="gwNode">
+          <div class="gw-label">AI Gateway</div>
+          <div class="gw-status" id="gwStatus">等待请求</div>
+        </div>
+      </div>
+      <!-- Strategy label -->
+      <div class="strategy-label" id="stratLabel">── 权重分配 + 用户粘性哈希 ──</div>
+      <!-- Model cards -->
+      <div class="model-grid" id="modelGrid"></div>
+      <!-- Error box -->
+      <div class="error-box" id="errBox" style="display:none">
+        Error: proxyToGoService not implemented yet
+        <div class="hint">→ 路由决策已完成，等待 Go 服务对接后即可正常工作</div>
+      </div>
+    </div>
+
+    <!-- Log panel -->
+    <div class="log-panel">
+      <div class="log-header"><span>请求日志</span><button class="log-clear" id="logClear">清除</button></div>
+      <div class="log-body" id="logBody"><div class="log-empty">点击「发送请求」开始模拟</div></div>
+    </div>
+  </div>
+
+  <!-- Config preview -->
+  <div class="config-bar">
+    <div class="config-title">x-gateway-config（请求头配置）</div>
+    <pre class="config-pre" id="configPre"></pre>
+  </div>
+</div>
+
+<script>
+// ─── 数据 & 状态 ───
+const MODELS = [
+  { provider: "openai",    model: "gpt-4o",        color: "#10a37f", weight: 60 },
+  { provider: "anthropic", model: "claude-sonnet",  color: "#d97706", weight: 25 },
+  { provider: "deepseek",  model: "deepseek-v3",    color: "#6366f1", weight: 15 },
+];
+
+let mode = "loadbalance";
+let phase = "idle";          // idle | validating | routing | result | error
+let modelStates = ["idle","idle","idle"];
+let cbStates = [{f:0,s:"CLOSED"},{f:0,s:"CLOSED"},{f:0,s:"CLOSED"}];
+let logs = [];
+
+// ─── 工具函数 ───
+function djb2(str) {
+  let h = 5381;
+  for (let i = 0; i < str.length; i++) h = ((h * 33) ^ str.charCodeAt(i)) >>> 0;
+  return h;
+}
+
+function selectByWeight(targets, userId) {
+  const tw = targets.reduce((s, t) => s + t.weight, 0);
+  if (tw <= 0) return 0;
+  if (userId) {
+    const pos = (djb2(userId) / 0x100000000) * tw;
+    let cum = 0;
+    for (let i = 0; i < targets.length; i++) { cum += targets[i].weight; if (pos < cum) return i; }
+    return targets.length - 1;
+  }
+  const pos = Math.random() * tw;
+  let cum = 0;
+  for (let i = 0; i < targets.length; i++) { cum += targets[i].weight; if (pos < cum) return i; }
+  return targets.length - 1;
+}
+
+function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
+
+function addLog(msg, type) {
+  const t = new Date().toLocaleTimeString("en-US",{hour12:false,hour:"2-digit",minute:"2-digit",second:"2-digit"});
+  logs.push({ msg, type, t });
+  if (logs.length > 16) logs.shift();
+  renderLogs();
+}
+
+// ─── DOM 引用 ───
+const $ = id => document.getElementById(id);
+const gwNode = $("gwNode"), gwStatus = $("gwStatus"), modelGrid = $("modelGrid");
+const stratLabel = $("stratLabel"), errBox = $("errBox"), logBody = $("logBody");
+const configPre = $("configPre"), condGroup = $("condGroup");
+const btnSend = $("btnSend"), btnFail0 = $("btnFail0"), btnFail1 = $("btnFail1"), btnReset = $("btnReset");
+
+// ─── 渲染 ───
+function renderModels() {
+  modelGrid.innerHTML = MODELS.map((m, i) => {
+    const st = modelStates[i];
+    const cls = st !== "idle" ? " " + st : "";
+    const cb = cbStates[i];
+    const cbCls = cb.s === "OPEN" ? "cb-open" : cb.s === "HALF_OPEN" ? "cb-half" : "cb-closed";
+    const showCB = mode === "fallback";
+    let icon = "";
+    if (st === "selected") icon = `<div class="status-icon ok">✓</div>`;
+    if (st === "rejected") icon = `<div class="status-icon fail">✗</div>`;
+    return `
+      <div class="model-card${cls}" id="mc${i}">
+        ${icon}
+        <div class="model-head">
+          <div class="model-dot" style="background:${m.color};box-shadow:0 0 7px ${m.color}60"></div>
+          <span class="model-name">${m.model}</span>
+        </div>
+        <div class="model-meta"><span>${m.provider}</span><span>w:${m.weight}</span></div>
+        ${showCB ? `<div class="cb-badge ${cbCls}">CB: ${cb.s} (fail: ${cb.f})</div>` : ""}
+      </div>`;
+  }).join("");
+}
+
+function renderLogs() {
+  if (!logs.length) { logBody.innerHTML = '<div class="log-empty">点击「发送请求」开始模拟</div>'; return; }
+  logBody.innerHTML = logs.map(l => `<div class="log-${l.type}"><span class="log-time">${l.t}</span> ${l.msg}</div>`).join("");
+  logBody.scrollTop = logBody.scrollHeight;
+}
+
+function renderConfig() {
+  const cfg = { strategy: { mode }, targets: MODELS.map(m => ({ provider: m.provider, model: m.model, weight: m.weight })) };
+  if (mode === "conditional") {
+    const val = $("condValue").value;
+    cfg.strategy.conditions = [{ query: { model: { "$eq": val } }, then: 0 }];
+    cfg.strategy.default = 2;
+  }
+  configPre.textContent = JSON.stringify(cfg, null, 2);
+}
+
+function setPhase(p) {
+  phase = p;
+  gwNode.className = "gw-node" + (p !== "idle" ? " " + p : "");
+  const labels = { idle:"等待请求", validating:"验证配置...", routing:mode.toUpperCase()+" 路由中...", result:"转发中...", error:"转发失败 ✗" };
+  gwStatus.textContent = labels[p] || "";
+  btnSend.disabled = !(p === "idle" || p === "result" || p === "error");
+}
+
+function setModelState(i, st) { modelStates[i] = st; renderModels(); }
+function resetModelStates() { modelStates = ["idle","idle","idle"]; renderModels(); }
+
+function updateStratLabel() {
+  const uid = $("userId").value;
+  if (mode === "loadbalance") stratLabel.textContent = `── 权重分配 ${uid ? "+ 用户粘性哈希" : "(纯随机)"} ──`;
+  else if (mode === "fallback") stratLabel.textContent = "── 按顺序尝试（检查熔断器状态） ──";
+  else stratLabel.textContent = `── 条件匹配: model == "${$("condValue").value}" ──`;
+}
+
+// ─── 粒子动画 ───
+function spawnParticle(fromEl, toEl, color) {
+  const area = $("flowArea").getBoundingClientRect();
+  const from = fromEl.getBoundingClientRect();
+  const to = toEl.getBoundingClientRect();
+  const fx = from.left - area.left + from.width/2, fy = from.top - area.top + from.height/2;
+  const tx = to.left - area.left + to.width/2, ty = to.top - area.top + to.height/2;
+
+  const el = document.createElement("div");
+  el.className = "particle";
+  el.style.cssText = `left:${fx}px;top:${fy}px;background:${color};box-shadow:0 0 10px ${color},0 0 20px ${color}40;opacity:0`;
+  $("flowArea").appendChild(el);
+
+  const dur = 700; let start = null;
+  function tick(now) {
+    if (!start) start = now;
+    const p = Math.min((now - start) / dur, 1);
+    const ease = 1 - Math.pow(1 - p, 3);
+    el.style.left = (fx + (tx - fx) * ease) + "px";
+    el.style.top  = (fy + (ty - fy) * ease) + "px";
+    el.style.opacity = p < .1 ? p*10 : p > .85 ? (1-p)*6.67 : 1;
+    if (p < 1) requestAnimationFrame(tick);
+    else el.remove();
+  }
+  requestAnimationFrame(tick);
+}
+
+// ─── 核心模拟 ───
+async function simulateRequest() {
+  resetModelStates();
+  errBox.style.display = "none";
+  setPhase("validating");
+  addLog("收到请求 POST /v1/chat/completions", "request");
+  addLog(`x-gateway-config: { mode: "${mode}" }`, "config");
+
+  await sleep(500);
+  addLog("✓ requestValidator 验证通过", "success");
+  const uid = $("userId").value;
+  if (uid) addLog(`userId: ${uid} → 启用粘性哈希`, "info");
+
+  await sleep(350);
+  setPhase("routing");
+  addLog(`→ routeRequest() 策略: ${mode.toUpperCase()}`, "route");
+
+  if (mode === "loadbalance") {
+    for (let i = 0; i < 3; i++) setModelState(i, "routing");
+    renderModels();
+    MODELS.forEach((_, i) => spawnParticle(gwNode, document.getElementById("mc"+i), "#3576f0"));
+    await sleep(900);
+
+    const idx = selectByWeight(MODELS, uid || null);
+    if (uid) {
+      const h = djb2(uid), tw = MODELS.reduce((s,t)=>s+t.weight,0);
+      addLog(`  djb2("${uid}") = ${h}, pos = ${(h/0x100000000*tw).toFixed(1)}/${tw}`, "info");
+    }
+    addLog(`  权重: ${MODELS.map(m=>m.model+"("+m.weight+")").join(" | ")}`, "info");
+    for (let i = 0; i < 3; i++) setModelState(i, i === idx ? "selected" : "rejected");
+    addLog(`✓ 选中: ${MODELS[idx].model} (${MODELS[idx].provider})`, "success");
+
+  } else if (mode === "fallback") {
+    let chosen = -1;
+    for (let i = 0; i < MODELS.length; i++) {
+      setModelState(i, "routing");
+      spawnParticle(gwNode, document.getElementById("mc"+i), "#3576f0");
+      await sleep(600);
+      if (cbStates[i].s === "OPEN") {
+        addLog(`  ✗ ${MODELS[i].model}: 熔断器 OPEN, 跳过`, "error");
+        setModelState(i, "rejected");
+        continue;
+      }
+      addLog(`  ✓ ${MODELS[i].model}: 熔断器 ${cbStates[i].s}, 可用`, "success");
+      setModelState(i, "selected");
+      chosen = i;
+      break;
+    }
+    if (chosen === -1) addLog("✗ 所有 target 均已熔断!", "error");
+
+  } else if (mode === "conditional") {
+    const val = $("condValue").value;
+    addLog(`  匹配条件: model == "${val}"`, "info");
+    await sleep(450);
+    const idx = MODELS.findIndex(m => m.model === val);
+    if (idx >= 0) {
+      spawnParticle(gwNode, document.getElementById("mc"+idx), "#1dcc6a");
+      await sleep(550);
+      setModelState(idx, "selected");
+      addLog(`✓ 条件匹配: ${MODELS[idx].model}`, "success");
+    } else {
+      addLog("✗ 无匹配规则, 返回 null", "error");
+    }
+  }
+
+  await sleep(500);
+  setPhase("result");
+  addLog("→ proxyToGoService() 调用...", "route");
+  await sleep(400);
+  addLog("✗ Error: proxyToGoService not implemented yet", "error");
+  setPhase("error");
+  errBox.style.display = "block";
+}
+
+// ─── 熔断器模拟 ───
+function triggerCB(i) {
+  cbStates[i].f++;
+  if (cbStates[i].f >= 3) cbStates[i].s = "OPEN";
+  addLog(`${MODELS[i].model} 失败+1 (总计: ${cbStates[i].f}), 状态: ${cbStates[i].s}`, cbStates[i].s === "OPEN" ? "error" : "info");
+  renderModels();
+}
+function resetCB() {
+  cbStates = [{f:0,s:"CLOSED"},{f:0,s:"CLOSED"},{f:0,s:"CLOSED"}];
+  addLog("所有熔断器已重置", "success");
+  renderModels();
+}
+
+// ─── 事件绑定 ───
+document.querySelectorAll(".mode-btn").forEach(btn => {
+  btn.addEventListener("click", () => {
+    document.querySelectorAll(".mode-btn").forEach(b => b.classList.remove("active"));
+    btn.classList.add("active");
+    mode = btn.dataset.mode;
+    resetModelStates();
+    errBox.style.display = "none";
+    setPhase("idle");
+    condGroup.style.display = mode === "conditional" ? "block" : "none";
+    btnFail0.style.display = btnFail1.style.display = btnReset.style.display = mode === "fallback" ? "inline-block" : "none";
+    updateStratLabel();
+    renderConfig();
+    renderModels();
+  });
+});
+
+btnSend.addEventListener("click", () => { if (phase==="idle"||phase==="result"||phase==="error") simulateRequest(); });
+btnFail0.addEventListener("click", () => triggerCB(0));
+btnFail1.addEventListener("click", () => triggerCB(1));
+btnReset.addEventListener("click", resetCB);
+$("logClear").addEventListener("click", () => { logs=[]; renderLogs(); });
+$("userId").addEventListener("input", () => { updateStratLabel(); renderConfig(); });
+$("condValue").addEventListener("change", () => { updateStratLabel(); renderConfig(); });
+
+// ─── 初始化 ───
+renderModels();
+renderConfig();
+updateStratLabel();
+</script>
+</body>
+</html>
