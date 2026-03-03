@@ -99,7 +99,7 @@ export async function withRetry<T>(
   fn:       () => Promise<T>,
   settings: RetrySettings,
 ): Promise<T> {
-  const maxAttempts   = settings.attempts          // 最大重试次数（不含首次）
+  const maxAttempts   = Math.max(0, settings.attempts) // 最大重试次数（不含首次），负值视为 0
   const baseDelay     = settings.baseDelay ?? DEFAULT_BASE_DELAY_MS
   const retryCodes    = settings.onStatusCodes ?? DEFAULT_RETRY_STATUS_CODES
 
