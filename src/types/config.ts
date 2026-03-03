@@ -225,7 +225,7 @@ export interface RequestContext {
   /**
    * 用户标识符（可选）
    * 在 loadbalance 模式下用于一致性哈希，确保同一用户命中同一 target。
-   * 从 `x-user-id` header 或请求体 `user` 字段读取。
+   * 从 `x-gateway-user-id` header 读取。
    */
   userId?: string
 
@@ -237,7 +237,7 @@ export interface RequestContext {
 
   /**
    * 自定义元数据（可选）
-   * 从 `x-metadata` header（JSON）读取，用于条件路由匹配。
+   * 从 `x-gateway-metadata` header（JSON）读取，用于条件路由匹配。
    * 示例：{ "region": "us-west", "tier": "premium" }
    */
   metadata?: Record<string, unknown>
