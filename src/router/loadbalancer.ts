@@ -65,6 +65,9 @@ function pickByPosition(targets: Target[], weights: number[], position: number):
 function selectByWeight(targets: Target[]): Target {
   const weights     = getWeights(targets)
   const totalWeight = weights.reduce((a, b) => a + b, 0)
+  if (totalWeight <= 0) {
+    throw new Error('loadbalancer: total weight must be greater than 0')
+  }
   const position    = Math.random() * totalWeight
   return pickByPosition(targets, weights, position)
 }
@@ -88,6 +91,9 @@ function selectByWeight(targets: Target[]): Target {
 function selectByUserId(targets: Target[], userId: string): Target {
   const weights     = getWeights(targets)
   const totalWeight = weights.reduce((a, b) => a + b, 0)
+  if (totalWeight <= 0) {
+    throw new Error('loadbalancer: total weight must be greater than 0')
+  }
 
   // 2^32 = 0x100000000；hash / 2^32 ∈ [0, 1)
   const hash     = djb2Hash(userId)
