@@ -1,0 +1,12 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    // ts-jest + ESM 需要 ESNext 模块格式
+    // bundler 解析模式：兼容 .js 扩展名的导入（不强制要求，也不报错）
+    "module": "ESNext",
+    "moduleResolution": "bundler"
+  },
+  // 包含测试文件（移除主 tsconfig 中对 __tests__ 的排除）
+  "include": ["src/**/*.ts"],
+  "exclude": ["node_modules", "dist"]
+}
