@@ -60,9 +60,13 @@ function evaluateOperator(actual: unknown, op: string, expected: unknown): boole
     case '$in':  return Array.isArray(expected) && expected.includes(actual)
     case '$nin': return Array.isArray(expected) && !expected.includes(actual)
     case '$regex':
-      return typeof actual === 'string' &&
-             typeof expected === 'string' &&
-             new RegExp(expected).test(actual)
+      if (typeof actual !== 'string' || typeof expected !== 'string') return false
+      try {
+        return new RegExp(expected).test(actual)
+      } catch {
+        // 无效正则表达式视为不匹配（防御 ReDoS / 语法错误）
+        return false
+      }
     default:
       return false
   }
