@@ -73,8 +73,9 @@ async function handleAIRequest(c: Context<AppEnv>): Promise<Response> {
     })
 
   } catch (err) {
-    // 网络级错误 / proxyToGoService 未实现 → 将 target 标记为失败
-    if (lastTarget) {
+    // RetryableError 已在内部回调中调用过 updateCircuitBreaker，不重复记录
+    // 仅对非重试错误（网络异常 / proxyToGoService 未实现等）标记 target 失败
+    if (lastTarget && !(err instanceof RetryableError)) {
       updateCircuitBreaker(lastTarget, 0, DEFAULT_RETRY_STATUS_CODES)
     }
     const msg    = err instanceof Error ? err.message : 'Internal gateway error'
